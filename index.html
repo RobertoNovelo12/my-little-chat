@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111b24">
+  <title>Entre dos · Chat</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main id="login-screen" class="login-screen" hidden>
+    <div class="login-card">
+      <div class="brand-mark" aria-hidden="true">✳</div>
+      <div class="eyebrow">UN ESPACIO PARA DOS</div>
+      <h1>Entre dos<span class="accent">.</span></h1>
+      <p class="login-intro">Entra a tu conversación.</p>
+      <form id="login-form">
+        <label for="email">Correo electrónico</label>
+        <input id="email" type="email" autocomplete="username" required placeholder="tu@correo.com">
+        <label for="password">Contraseña</label>
+        <input id="password" type="password" autocomplete="current-password" required placeholder="Tu contraseña">
+        <button class="primary wide" type="submit" id="login-submit">Entrar al chat <span aria-hidden="true">↗</span></button>
+        <p id="login-error" class="form-error" role="alert" hidden></p>
+      </form>
+      <p class="login-note">Acceso exclusivo para las dos cuentas del chat.</p>
+    </div>
+    <div class="login-art" aria-hidden="true"><div class="art-top">UNA CONVERSACIÓN PRIVADA</div><div class="art-bubble first">¿Hablamos un rato?</div><div class="art-bubble second">Siempre. <span>♥</span></div><div class="art-bottom">02 PERSONAS · UN MISMO LUGAR</div></div>
+  </main>
+
+  <main id="app-screen" class="app-shell" hidden>
+    <aside class="sidebar" aria-label="Navegación">
+      <div class="side-brand"><div class="brand-mark small">✳</div><span>Entre dos<span class="accent">.</span></span></div>
+      <nav aria-label="Pantallas"><button type="button" class="nav-item" data-go="chat"><span aria-hidden="true">◫</span> Chat</button><button type="button" class="nav-item" data-go="settings"><span aria-hidden="true">⚙</span> Ajustes</button></nav>
+      <div class="side-account"><div class="avatar" id="side-avatar"></div><div class="account-text"><strong id="side-name"></strong><span>Mi cuenta</span></div></div>
+    </aside>
+    <section id="chat-screen" class="view chat-view" aria-label="Chat" hidden>
+      <header class="chat-header">
+        <div class="contact"><div id="peer-avatar" class="avatar peer-avatar"></div><div><strong id="peer-name">Chat</strong><small>Conversación privada</small></div></div>
+        <div class="menu-wrap"><button type="button" id="menu-button" class="icon-button" aria-label="Más opciones" aria-haspopup="menu" aria-expanded="false">⋮</button>
+          <div id="menu" class="menu" role="menu" hidden>
+            <button role="menuitem" type="button" data-action="favorites">Favoritos</button>
+            <button role="menuitem" type="button" data-action="settings">Ajustes</button>
+            <button role="menuitem" type="button" data-action="clear">Limpiar chat</button>
+            <div class="menu-separator"></div>
+            <button role="menuitem" type="button" data-action="logout">Cerrar sesión</button>
+          </div>
+        </div>
+      </header>
+      <div id="chat-notice" class="chat-notice" role="status" hidden></div>
+      <div id="messages" class="messages" role="log" aria-label="Mensajes" aria-live="polite"></div>
+      <div id="reply-preview" class="reply-preview" role="status" hidden>
+        <div class="reply-preview-content"><strong id="reply-author"></strong><span id="reply-snippet"></span></div>
+        <button id="cancel-reply" type="button" class="icon-button" aria-label="Cancelar respuesta">×</button>
+      </div>
+      <form id="composer" class="composer">
+        <input id="file-input" type="file" hidden>
+        <button id="attach-button" class="icon-button" type="button" title="Adjuntar archivo" aria-label="Adjuntar archivo">＋</button>
+        <textarea id="message-input" rows="1" maxlength="5000" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje"></textarea>
+        <button id="audio-button" class="icon-button" type="button" title="Grabar audio" aria-label="Grabar audio">♬</button>
+        <button id="send-button" class="send-button" type="submit" aria-label="Enviar mensaje">➤</button>
+      </form>
+    </section>
+    <section id="settings-screen" class="view settings-view" aria-labelledby="settings-title" hidden>
+      <header class="settings-header"><span class="eyebrow">TU ESPACIO</span><h1 id="settings-title">Ajustes<span class="accent">.</span></h1><p>Personaliza tu perfil y la forma en que ves el chat.</p></header>
+      <form id="settings-form" class="settings-card">
+        <div class="settings-row"><div><label for="setting-name">Cambiar nombre</label><p>Así aparecerás en la conversación.</p></div><input id="setting-name" type="text" maxlength="100" required></div>
+        <div class="settings-row"><div><label for="setting-nickname">Cambiar apodo</label><p>Un nombre corto para ti.</p></div><input id="setting-nickname" type="text" maxlength="50" placeholder="Opcional"></div>
+        <div class="settings-row"><div><label for="setting-theme">Tema</label><p>Elige cómo se ve tu espacio.</p></div><select id="setting-theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select></div>
+        <div class="settings-row"><div><label for="setting-notifications">Activar notificaciones</label><p>Avisos de mensajes nuevos mientras el chat esté abierto.</p></div><input id="setting-notifications" type="checkbox" class="switch"></div>
+        <div class="settings-footer"><span id="settings-feedback" role="status"></span><button type="submit" class="primary" id="settings-save">Guardar cambios</button></div>
+      </form>
+      <button type="button" class="back-link" data-go="chat">← Volver al chat</button>
+    </section>
+  </main>
+  <dialog id="favorites-dialog" class="favorites-dialog"><div class="dialog-head"><div><span class="eyebrow">GUARDADOS</span><h2>Favoritos</h2></div><button type="button" id="close-favorites" class="icon-button" aria-label="Cerrar">×</button></div><div id="favorite-list" class="favorite-list"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
