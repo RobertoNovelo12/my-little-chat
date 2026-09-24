@@ -12,6 +12,56 @@ const configured = /^https:\/\/[^/]+\.supabase\.co\/?$/.test(cfg.url || '')
 const db = configured ? createClient(cfg.url, cfg.publishableKey) : null;
 const state = { user: null, profile: null, settings: null, chatId: null, peer: null, clearedAt: null, messages: [], favoriteIds: new Set(), replyTo: null, renderSignature: null, channel: null, poll: null, recorder: null, stream: null, chunks: [], loading: false };
 let toastTimeout, refreshSerial = 0;
+let notificationWorker = null;
+
+function syncMobileViewport() {
+  if (!window.visualViewport || window.innerWidth > 800) return;
+  document.documentElement.style.setProperty('--app-height', `${window.visualViewport.height}px`);
+  document.documentElement.style.setProperty('--app-top', `${window.visualViewport.offsetTop}px`);
+}
+window.visualViewport?.addEventListener('resize', syncMobileViewport);
+window.visualViewport?.addEventListener('scroll', syncMobileViewport);
+window.addEventListener('resize', syncMobileViewport);
+syncMobileViewport();
+
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  notificationWorker = navigator.serviceWorker.register('/notification-sw.js').catch(error => {
+    console.warn('No se pudo preparar el servicio de notificaciones.', error);
+    return null;
+  });
+}
+function showNotificationPrompt() {
+  $('notification-prompt').hidden = !state.user || !('Notification' in window)
+    || Notification.permission !== 'default' || localStorage.getItem('notifications-dismissed') === '1';
+}
+async function requestNotifications() {
+  if (!('Notification' in window) || !window.isSecureContext) { notify('Este navegador no permite notificaciones aquí. Usa HTTPS.'); return false; }
+  if (Notification.permission === 'denied') { notify('Activa las notificaciones desde los permisos del sitio en tu navegador.'); return false; }
+  try {
+    // Esta llamada debe ocurrir directamente durante el clic, antes de esperar a la base de datos.
+    const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+    if (permission !== 'granted') { showNotificationPrompt(); return false; }
+    $('notification-prompt').hidden = true;
+    return true;
+  } catch (error) { notify('No se pudo solicitar el permiso: ' + errorMessage(error)); return false; }
+}
+async function notifyIncoming(message) {
+  if (!state.settings?.notificaciones_activadas || !document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const title = nameOf(state.peer);
+  const options = { body:message.tipo === 'text' ? (message.contenido || 'Nuevo mensaje').slice(0, 100) : 'Nuevo archivo o audio', tag:`message-${message.id}` };
+  try {
+    const worker = await notificationWorker;
+    if (worker) await worker.showNotification(title, options);
+    else new Notification(title, options);
+  } catch (error) { console.warn('No se pudo mostrar la notificación.', error); }
+}
+function setSending(sending) {
+  const button = $('send-button');
+  button.disabled = sending;
+  button.classList.toggle('sending', sending);
+  button.setAttribute('aria-label', sending ? 'Enviando mensaje' : 'Enviar mensaje');
+  $('composer').setAttribute('aria-busy', String(sending));
+}
 
 function notify(message) { const el = $('toast'); el.textContent = message; el.hidden = false; clearTimeout(toastTimeout); toastTimeout = setTimeout(() => el.hidden = true, 4200); }
 function errorMessage(error) { return error?.message || 'Ocurrió un error. Inténtalo de nuevo.'; }
@@ -21,9 +71,10 @@ function applyTheme(theme) { const dark = theme === 'dark' || (theme === 'system
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(state.settings?.tema || 'system'));
 function showScreen(which) {
   $('login-screen').hidden = which !== 'login'; $('app-screen').hidden = which === 'login';
+  document.body.classList.toggle('app-open', which !== 'login');
   $('chat-screen').hidden = which !== 'chat'; $('settings-screen').hidden = which !== 'settings';
   document.querySelectorAll('[data-go]').forEach(el => el.classList.toggle('active', el.dataset.go === which));
-  if (which === 'chat') requestAnimationFrame(() => { $('messages').scrollTop = $('messages').scrollHeight; });
+  if (which === 'chat') requestAnimationFrame(() => { syncMobileViewport(); $('messages').scrollTop = $('messages').scrollHeight; });
 }
 function setNotice(text) { $('chat-notice').textContent = text; $('chat-notice').hidden = !text; }
 function setMenu(open) { $('menu').hidden = !open; $('menu-button').setAttribute('aria-expanded', String(open)); }
@@ -63,7 +114,7 @@ function enableSwipeReply(card, message) {
 function cleanup() {
   if (state.channel && db) db.removeChannel(state.channel);
   clearInterval(state.poll); stopRecorder(false); clearReply(); Object.assign(state, { user: null, profile: null, settings: null, chatId: null, peer: null, clearedAt: null, messages: [], favoriteIds: new Set(), renderSignature: null, channel: null, poll: null });
-  $('messages').replaceChildren(); setMenu(false);
+  $('messages').replaceChildren(); $('notification-prompt').hidden = true; setSending(false); setMenu(false);
 }
 async function checked(query) { const { data, error } = await query; if (error) throw error; return data; }
 async function loadAccount(user) {
@@ -76,6 +127,7 @@ async function loadAccount(user) {
     ]);
     if (state.user?.id !== user.id) return;
     state.profile = profile; state.settings = settings;
+    showNotificationPrompt();
     $('side-name').textContent = nameOf(profile); $('side-avatar').textContent = initials(nameOf(profile));
     $('setting-name').value = profile.nombre; $('setting-nickname').value = profile.apodo || '';
     $('setting-theme').value = settings.tema; $('setting-notifications').checked = settings.notificaciones_activadas;
@@ -155,16 +207,14 @@ async function loadAttachment(attachment, target, type) {
 }
 function subscribeChat() {
   state.channel = db.channel('chat-' + state.chatId).on('postgres_changes', { event:'INSERT', schema:'public', table:'messages', filter:`conversation_id=eq.${state.chatId}` }, async payload => {
-    if (payload.new.sender_id !== state.user?.id && state.settings?.notificaciones_activadas && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification(nameOf(state.peer), { body: payload.new.tipo === 'text' ? (payload.new.contenido || 'Nuevo mensaje').slice(0, 100) : 'Nuevo archivo o audio' });
-    }
+    if (payload.new.sender_id !== state.user?.id) void notifyIncoming(payload.new);
     await refreshMessages();
   }).subscribe();
   state.poll = setInterval(() => { if (!document.hidden) refreshMessages(); }, 12000);
 }
 async function sendText(event) {
   event.preventDefault(); const text = $('message-input').value.trim(); if (!text || !state.chatId) return;
-  const btn = $('send-button'); if (btn.disabled) return; btn.disabled = true;
+  if ($('send-button').disabled) return; setSending(true);
   const replyId = state.replyTo?.id || null;
   try {
     await checked(db.from('messages').insert({ conversation_id:state.chatId, sender_id:state.user.id, tipo:'text', contenido:text, reply_to:replyId }));
@@ -173,7 +223,7 @@ async function sendText(event) {
     await refreshMessages();
   }
   catch (error) { notify('No se pudo enviar: ' + errorMessage(error)); }
-  finally { btn.disabled = false; $('message-input').focus(); }
+  finally { setSending(false); $('message-input').focus(); }
 }
 async function sendFile(file, audio = false) {
   if (!file || !state.chatId) return;
@@ -228,7 +278,6 @@ async function saveSettings(event) {
       await checked(db.from('user_settings').update({ tema:theme, notificaciones_activadas:enabled }).eq('user_id', state.user.id));
       state.settings = { tema:theme, notificaciones_activadas:enabled };
     }
-    if (enabled && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
     applyTheme(theme); $('side-name').textContent = nameOf(state.profile); $('side-avatar').textContent = initials(nameOf(state.profile));
     $('settings-feedback').textContent = 'Cambios guardados.';
   } catch (error) { $('settings-feedback').textContent = 'No se guardaron todos los cambios. Vuelve a intentarlo.'; notify(errorMessage(error)); }
@@ -259,6 +308,18 @@ $('attach-button').addEventListener('click', () => $('file-input').click());
 $('file-input').addEventListener('change', e => sendFile(e.target.files?.[0]));
 $('audio-button').addEventListener('click', toggleAudio);
 $('settings-form').addEventListener('submit', saveSettings);
+$('enable-notifications').addEventListener('click', async () => {
+  if (!await requestNotifications()) return;
+  try {
+    await checked(db.from('user_settings').update({ notificaciones_activadas:true }).eq('user_id', state.user.id));
+    state.settings.notificaciones_activadas = true; $('setting-notifications').checked = true;
+    notify('Notificaciones activadas.');
+  } catch (error) { notify('No se pudo guardar la preferencia: ' + errorMessage(error)); }
+});
+$('dismiss-notifications').addEventListener('click', () => { localStorage.setItem('notifications-dismissed', '1'); $('notification-prompt').hidden = true; });
+$('setting-notifications').addEventListener('change', async event => {
+  if (event.target.checked && !await requestNotifications()) event.target.checked = false;
+});
 $('menu-button').addEventListener('click', () => setMenu($('menu').hidden));
 document.addEventListener('click', e => { if (!e.target.closest('.menu-wrap')) setMenu(false); });
 document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => { location.hash = button.dataset.go === 'settings' ? '#ajustes' : '#chat'; showScreen(button.dataset.go); }));

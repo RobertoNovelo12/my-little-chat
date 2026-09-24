@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
   <meta name="theme-color" content="#111b24">
   <title>Entre dos · Chat</title>
   <link rel="stylesheet" href="./styles.css">
@@ -47,6 +47,11 @@
           </div>
         </div>
       </header>
+      <div id="notification-prompt" class="notification-prompt" hidden>
+        <div><strong>¿Quieres avisos de mensajes nuevos?</strong><span>Puedes activarlos mientras la página esté abierta.</span></div>
+        <button id="enable-notifications" type="button" class="notification-enable">Activar</button>
+        <button id="dismiss-notifications" type="button" class="notification-dismiss" aria-label="Ahora no">×</button>
+      </div>
       <div id="chat-notice" class="chat-notice" role="status" hidden></div>
       <div id="messages" class="messages" role="log" aria-label="Mensajes" aria-live="polite"></div>
       <div id="reply-preview" class="reply-preview" role="status" hidden>
@@ -58,7 +63,7 @@
         <button id="attach-button" class="icon-button" type="button" title="Adjuntar archivo" aria-label="Adjuntar archivo">＋</button>
         <textarea id="message-input" rows="1" maxlength="5000" placeholder="Escribe un mensaje…" aria-label="Escribe un mensaje"></textarea>
         <button id="audio-button" class="icon-button" type="button" title="Grabar audio" aria-label="Grabar audio">♬</button>
-        <button id="send-button" class="send-button" type="submit" aria-label="Enviar mensaje">➤</button>
+        <button id="send-button" class="send-button" type="submit" aria-label="Enviar mensaje"><span class="send-icon" aria-hidden="true">➤</span><span class="send-spinner" aria-hidden="true"></span></button>
       </form>
     </section>
     <section id="settings-screen" class="view settings-view" aria-labelledby="settings-title" hidden>
